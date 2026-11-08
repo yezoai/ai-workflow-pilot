@@ -1,0 +1,65 @@
+# Bootstrap CI for yezoai/ai-workflow-pilot.
+# Stable aggregate check name: pr-required.
+# Select it as a required check only after a run for this name exists.
+# This file does not deploy, does not read secrets, and does not use pull_request_target.
+
+name: PR checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js from .node-version
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+          package-manager-cache: false
+
+      - name: Show pinned Node version
+        run: node -v
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+        env:
+          GITHUB_TOKEN: ""
+          NODE_AUTH_TOKEN: ""
+
+  pr-required:
+    name: pr-required
+    needs: test
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail unless the constituent test job succeeded
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          echo "constituent test result: ${TEST_RESULT}"
+          if [ "${TEST_RESULT}" != "success" ]; then
+            echo "pr-required failed: constituent result=${TEST_RESULT}. failure, cancelled, and skipped are not success."
+            exit 1
+          fi
+          echo "pr-required passed: constituent result=success"
